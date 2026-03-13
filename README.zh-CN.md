@@ -116,6 +116,12 @@ browser_fallback:
   idle_rounds: 8
   wait_timeout_seconds: 600
 
+network:
+  verify: true
+  trust_env: false
+  ca_file: ""
+  ca_dir: ""
+
 transcript:
   enabled: false
   model: gpt-4o-mini-transcribe
@@ -378,6 +384,44 @@ python -m tools.cookie_fetcher --config config.yml
 ```bash
 sqlite3 dy_downloader.db "SELECT aweme_id, title, author_name, datetime(download_time, 'unixepoch', 'localtime') FROM aweme ORDER BY download_time DESC LIMIT 20;"
 ```
+
+### 6) 出现 `CERTIFICATE_VERIFY_FAILED` / `self-signed certificate in certificate chain` 怎么办？
+
+这通常不是抖音站点证书本身坏了，而是本机代理、抓包软件、杀软或企业网关插入了自签名根证书，而当前 Python TLS 信任链不认识它。
+
+优先按下面顺序处理：
+
+1. 给程序追加代理根证书
+
+```yaml
+network:
+  verify: true
+  ca_file: /path/to/proxy-root.pem
+  ca_dir: ""
+```
+
+也可以直接使用环境变量：
+
+```bash
+export SSL_CERT_FILE="/path/to/proxy-root.pem"
+export SSL_CERT_DIR="/path/to/certs"
+```
+
+2. 如果你本来就依赖环境代理变量（`HTTPS_PROXY` / `ALL_PROXY`），再显式开启：
+
+```yaml
+network:
+  trust_env: true
+```
+
+3. 只有在确认是临时调试、并且你知道风险时，才临时关闭证书校验：
+
+```yaml
+network:
+  verify: false
+```
+
+> **风险提示：** `verify: false` 会关闭 HTTPS 证书校验，可能让中间人攻击和伪造站点失去拦截能力。不要作为长期配置。
 
 ## 旧版切换（V1.0）
 

@@ -46,6 +46,123 @@ def test_build_signed_path_prefers_abogus(monkeypatch):
     assert "a_bogus=fake_ab" in signed_url
 
 
+def test_build_connector_uses_default_verified_context(monkeypatch):
+    import core.api_client as api_module
+
+    captured = {}
+    created_contexts = []
+
+    class _FakeContext:
+        def __init__(self):
+            self.loaded_locations = []
+
+        def load_verify_locations(self, cafile=None, capath=None):
+            self.loaded_locations.append((cafile, capath))
+
+    def _fake_create_default_context():
+        ctx = _FakeContext()
+        created_contexts.append(ctx)
+        return ctx
+
+    def _fake_connector(**kwargs):
+        captured.update(kwargs)
+        return ("connector", kwargs)
+
+    monkeypatch.setattr(api_module.ssl, "create_default_context", _fake_create_default_context)
+    monkeypatch.setattr(api_module.aiohttp, "TCPConnector", _fake_connector)
+
+    client = DouyinAPIClient({"msToken": "token-1"})
+    connector = client._build_connector()
+
+    assert connector[0] == "connector"
+    assert captured["ssl"] is created_contexts[0]
+    assert created_contexts[0].loaded_locations == []
+
+
+def test_build_connector_loads_custom_ca_locations(monkeypatch):
+    import core.api_client as api_module
+
+    captured = {}
+    created_contexts = []
+
+    class _FakeContext:
+        def __init__(self):
+            self.loaded_locations = []
+
+        def load_verify_locations(self, cafile=None, capath=None):
+            self.loaded_locations.append((cafile, capath))
+
+    def _fake_create_default_context():
+        ctx = _FakeContext()
+        created_contexts.append(ctx)
+        return ctx
+
+    def _fake_connector(**kwargs):
+        captured.update(kwargs)
+        return ("connector", kwargs)
+
+    monkeypatch.setattr(api_module.ssl, "create_default_context", _fake_create_default_context)
+    monkeypatch.setattr(api_module.aiohttp, "TCPConnector", _fake_connector)
+
+    client = DouyinAPIClient(
+        {"msToken": "token-1"},
+        network={
+            "ca_file": "/tmp/custom.pem",
+            "ca_dir": "/tmp/custom-certs",
+        },
+    )
+    client._build_connector()
+
+    assert captured["ssl"] is created_contexts[0]
+    assert created_contexts[0].loaded_locations == [
+        ("/tmp/custom.pem", "/tmp/custom-certs")
+    ]
+
+
+def test_build_connector_can_disable_tls_verification(monkeypatch):
+    import core.api_client as api_module
+
+    captured = {}
+
+    def _fake_connector(**kwargs):
+        captured.update(kwargs)
+        return ("connector", kwargs)
+
+    monkeypatch.setattr(api_module.aiohttp, "TCPConnector", _fake_connector)
+
+    client = DouyinAPIClient({"msToken": "token-1"}, network={"verify": False})
+    connector = client._build_connector()
+
+    assert connector[0] == "connector"
+    assert captured["ssl"] is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_session_uses_connector_and_trust_env(monkeypatch):
+    import core.api_client as api_module
+
+    captured = {}
+
+    class _FakeSession:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+    client = DouyinAPIClient({"msToken": "token-1"}, network={"trust_env": True})
+
+    monkeypatch.setattr(client, "_build_connector", lambda: "fake-connector")
+    monkeypatch.setattr(api_module.aiohttp, "ClientSession", _FakeSession)
+
+    await client._ensure_session()
+
+    assert captured["connector"] == "fake-connector"
+    assert captured["trust_env"] is True
+    await client.close()
+
+
 def test_browser_fallback_caps_warmup_wait(monkeypatch):
     class _FakeMouse:
         async def wheel(self, _x, _y):

@@ -63,7 +63,51 @@ class ConfigLoader:
                     "Invalid DOUYIN_THREAD value: %s, ignoring",
                     os.getenv("DOUYIN_THREAD"),
                 )
+        network_config: Dict[str, Any] = {}
+
+        tls_verify = self._parse_bool_env("DOUYIN_TLS_VERIFY")
+        if tls_verify is not None:
+            network_config["verify"] = tls_verify
+
+        trust_env = self._parse_bool_env("DOUYIN_TRUST_ENV")
+        if trust_env is not None:
+            network_config["trust_env"] = trust_env
+
+        ca_file = (
+            os.getenv("DOUYIN_TLS_CA_FILE")
+            or os.getenv("SSL_CERT_FILE")
+            or ""
+        ).strip()
+        if ca_file:
+            network_config["ca_file"] = ca_file
+
+        ca_dir = (
+            os.getenv("DOUYIN_TLS_CA_DIR")
+            or os.getenv("SSL_CERT_DIR")
+            or ""
+        ).strip()
+        if ca_dir:
+            network_config["ca_dir"] = ca_dir
+
+        if network_config:
+            env_config["network"] = network_config
+
         return env_config
+
+    @staticmethod
+    def _parse_bool_env(name: str) -> Optional[bool]:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            return None
+
+        normalized = raw_value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+
+        logger.warning("Invalid %s value: %s, ignoring", name, raw_value)
+        return None
 
     def _normalize_mix_aliases(
         self, config: Dict[str, Any], override_sources: List[Dict[str, Any]]

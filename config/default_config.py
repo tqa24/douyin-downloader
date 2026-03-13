@@ -32,6 +32,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "progress": {
         "quiet_logs": True,
     },
+    "network": {
+        "verify": True,
+        "trust_env": False,
+        "ca_file": "",
+        "ca_dir": "",
+    },
     "transcript": {
         "enabled": False,
         "model": "gpt-4o-mini-transcribe",

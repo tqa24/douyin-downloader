@@ -113,6 +113,53 @@ path: ./Downloaded/
     assert loader_b.get("progress", {}).get("quiet_logs") is True
 
 
+def test_network_tls_defaults_are_present(tmp_path):
+    config_file = tmp_path / "config.yml"
+    config_file.write_text(
+        """
+link:
+  - https://www.douyin.com/video/1
+path: ./Downloaded/
+"""
+    )
+
+    loader = ConfigLoader(str(config_file))
+    network = loader.get("network", {})
+
+    assert isinstance(network, dict)
+    assert network.get("verify") is True
+    assert network.get("trust_env") is False
+    assert network.get("ca_file") == ""
+    assert network.get("ca_dir") == ""
+
+
+def test_network_tls_env_overrides_are_loaded(tmp_path, monkeypatch):
+    config_file = tmp_path / "config.yml"
+    config_file.write_text(
+        """
+link:
+  - https://www.douyin.com/video/1
+path: ./Downloaded/
+network:
+  verify: true
+  trust_env: false
+"""
+    )
+
+    monkeypatch.setenv("DOUYIN_TLS_VERIFY", "false")
+    monkeypatch.setenv("DOUYIN_TRUST_ENV", "1")
+    monkeypatch.setenv("DOUYIN_TLS_CA_FILE", "/tmp/custom-ca.pem")
+    monkeypatch.setenv("SSL_CERT_DIR", "/tmp/custom-certs")
+
+    loader = ConfigLoader(str(config_file))
+    network = loader.get("network", {})
+
+    assert network.get("verify") is False
+    assert network.get("trust_env") is True
+    assert network.get("ca_file") == "/tmp/custom-ca.pem"
+    assert network.get("ca_dir") == "/tmp/custom-certs"
+
+
 @pytest.mark.parametrize(
     "number_cfg,increase_cfg,expected_mix_number,expected_mix_increase,expect_warning",
     [

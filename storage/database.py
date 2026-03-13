@@ -1,6 +1,8 @@
-import aiosqlite
+import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
+
+import aiosqlite
 
 
 class Database:
@@ -8,12 +10,22 @@ class Database:
         self.db_path = db_path
         self._initialized = False
         self._conn: Optional[aiosqlite.Connection] = None
+        self._conn_lock: Optional[asyncio.Lock] = None
 
     async def _get_conn(self) -> aiosqlite.Connection:
+        if self._conn is not None:
+            return self._conn
+
+        if self._conn_lock is None:
+            self._conn_lock = asyncio.Lock()
+
+        async with self._conn_lock:
+            if self._conn is None:
+                self._conn = await aiosqlite.connect(self.db_path)
+
         if self._conn is None:
-            async with asyncio.Lock():
-                if self._conn is None:
-                    self._conn = await aiosqlite.connect(self.db_path)
+            raise RuntimeError("Failed to create database connection")
+
         return self._conn
 
     async def initialize(self):

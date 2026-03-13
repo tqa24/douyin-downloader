@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import random
+import ssl
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
@@ -60,8 +62,13 @@ class DouyinAPIClient:
         "login_time",
     }
 
-    def __init__(self, cookies: Dict[str, str]):
+    def __init__(
+        self,
+        cookies: Dict[str, str],
+        network: Optional[Dict[str, Any]] = None,
+    ):
         self.cookies = sanitize_cookies(cookies or {})
+        self.network = dict(network or {})
         self._session: Optional[aiohttp.ClientSession] = None
         self._browser_post_aweme_items: Dict[str, Dict[str, Any]] = {}
         self._browser_post_stats: Dict[str, int] = {}
@@ -90,12 +97,52 @@ class DouyinAPIClient:
 
     async def _ensure_session(self):
         if self._session is None or self._session.closed:
+            connector = self._build_connector()
             self._session = aiohttp.ClientSession(
                 headers=self.headers,
                 cookies=self.cookies,
                 timeout=aiohttp.ClientTimeout(total=30),
                 raise_for_status=False,
+                connector=connector,
+                trust_env=self._as_bool(self.network.get("trust_env"), default=False),
             )
+
+    @staticmethod
+    def _as_bool(value: Any, default: bool) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _network_path(self, key: str, *env_names: str) -> str:
+        raw_value = self.network.get(key)
+        if isinstance(raw_value, str) and raw_value.strip():
+            return raw_value.strip()
+
+        for env_name in env_names:
+            env_value = (os.getenv(env_name) or "").strip()
+            if env_value:
+                return env_value
+        return ""
+
+    def _build_connector(self):
+        verify = self._as_bool(self.network.get("verify"), default=True)
+        if not verify:
+            logger.warning("TLS certificate verification disabled for Douyin API client")
+            return aiohttp.TCPConnector(ssl=False)
+
+        ssl_context = ssl.create_default_context()
+        ca_file = self._network_path("ca_file", "DOUYIN_TLS_CA_FILE", "SSL_CERT_FILE")
+        ca_dir = self._network_path("ca_dir", "DOUYIN_TLS_CA_DIR", "SSL_CERT_DIR")
+        if ca_file or ca_dir:
+            ssl_context.load_verify_locations(
+                cafile=ca_file or None,
+                capath=ca_dir or None,
+            )
+        return aiohttp.TCPConnector(ssl=ssl_context)
 
     async def close(self):
         if self._session and not self._session.closed:

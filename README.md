@@ -118,6 +118,12 @@ browser_fallback:
   idle_rounds: 8
   wait_timeout_seconds: 600
 
+network:
+  verify: true
+  trust_env: false
+  ca_file: ""
+  ca_dir: ""
+
 transcript:
   enabled: false
   model: gpt-4o-mini-transcribe
@@ -380,6 +386,44 @@ Check in order:
 ```bash
 sqlite3 dy_downloader.db "SELECT aweme_id, title, author_name, datetime(download_time, 'unixepoch', 'localtime') FROM aweme ORDER BY download_time DESC LIMIT 20;"
 ```
+
+### 6) What if I get `CERTIFICATE_VERIFY_FAILED` / `self-signed certificate in certificate chain`?
+
+This usually means the local machine is behind a proxy, packet capture tool, antivirus, or corporate gateway that injects its own root certificate, while Python does not trust that CA yet.
+
+Use this order of operations:
+
+1. Add the proxy/root CA to the downloader:
+
+```yaml
+network:
+  verify: true
+  ca_file: /path/to/proxy-root.pem
+  ca_dir: ""
+```
+
+You can also use environment variables:
+
+```bash
+export SSL_CERT_FILE="/path/to/proxy-root.pem"
+export SSL_CERT_DIR="/path/to/certs"
+```
+
+2. If you rely on proxy environment variables (`HTTPS_PROXY` / `ALL_PROXY`), explicitly enable:
+
+```yaml
+network:
+  trust_env: true
+```
+
+3. Only for temporary debugging, and only if you understand the risk, disable verification:
+
+```yaml
+network:
+  verify: false
+```
+
+> **Warning:** `verify: false` disables HTTPS certificate validation and makes man-in-the-middle interception much harder to detect. Do not keep it as a long-term setting.
 
 ## Legacy Version (V1.0)
 

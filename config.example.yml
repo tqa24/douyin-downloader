@@ -37,6 +37,12 @@ database: true
 progress:
   quiet_logs: true
 
+network:
+  verify: true
+  trust_env: false
+  ca_file: ""
+  ca_dir: ""
+
 transcript:
   enabled: false
   model: gpt-4o-mini-transcribe
